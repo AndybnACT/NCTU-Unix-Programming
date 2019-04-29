@@ -32,7 +32,11 @@ static void startup(void) {
         // fd of that logging file is closed.
         int fd = fileno(stderr);
         logFd = dup(fd);
-        logFILE = fdopen(logFd, "w+");
+        logFILE = fdopen(logFd, "w");
+        if (!logFILE) {
+            perror("fdopen: ");
+            exit(EXIT_FAILURE);
+        }
     }
     
     // unlock PRELOAD_LOGGING_lock so that any futher

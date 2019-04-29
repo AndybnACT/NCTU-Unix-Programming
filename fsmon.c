@@ -17,6 +17,20 @@ typedef int       TYPE_fd;
 
 void inject_log_entry(char* , int, struct argument *);
 void inject_log_exit(char* , int, struct argument *);
+// Look carefully! we will not encounter issues regarding reentrancy since
+// we have checked the lock status before modifing it. Therefore, the lock 
+// previously locked will not be unlocked when the function is called in 
+// reentrant manner!
+// Actually, comparing to the method (1) that explicitly finds the real runction
+// pointer in which used by the logger, or (2) that uses alternative functions
+// other than injected one in logger, our implementation provides more flexibilities.
+// For case 1, it would become a maintainance hell if the logger calls a bunch of 
+// injected functions. As for case 2, such as using `puts` function in logger when 
+// `printf` or `fprintf` is injected, we may encounter several issues as well.
+// First, we cannot guarantee the alternative function would not call any 
+// injected functions, causing accident invocation of the logger. Second, this method
+// largely limits functions that can be used in the logger if one wishes to inject
+// functions that are also accessed in the logger.
 #define INJECT_DEFINE(ret_type, func, num, ...)                     \
 ret_type func(VA_CONCAT_DECL_##num(__VA_ARGS__)){                   \
     ret_type (*real_func)(__VA_ARGS__);                             \
