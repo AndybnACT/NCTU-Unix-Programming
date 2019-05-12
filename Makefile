@@ -13,8 +13,8 @@ test:
 
 
 clean:
-	rm $(LIB) 
 	rm $(OBJS)
+	rm $(LIB) 
 
 %.o: %.asm
 	$(ASM64) $< -o $@

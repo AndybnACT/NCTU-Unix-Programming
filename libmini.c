@@ -5,6 +5,16 @@ long errno;
 #define	WRAPPER_RETval(type)	errno = 0; if(ret < 0) { errno = -ret; return -1; } return ((type) ret);
 #define	WRAPPER_RETptr(type)	errno = 0; if(ret < 0) { errno = -ret; return NULL; } return ((type) ret);
 
+ssize_t memset(void* dst, char set, ssize_t cnt){
+    char *dest = (char*) dst;
+    for (size_t i = 0; i < cnt; i++) {
+        dest[i] = set;
+    }
+    return cnt;
+}
+#define sigmask(sig) \
+    (((sigset_t) 0x1) << (sig-1)) 
+
 ssize_t	read(int fd, char *buf, size_t count) {
 	long ret = sys_read(fd, buf, count);
 	WRAPPER_RETval(ssize_t);
@@ -37,6 +47,113 @@ int	munmap(void *addr, size_t len) {
 	WRAPPER_RETval(int);
 }
 
+sighandler_t signal(int signum, sighandler_t handler){
+    long ret;
+    long sys_ret;
+    struct ksigaction oact = {0,};
+    struct ksigaction nact = {0,};
+    // basic check
+    if (signum < 0 || signum > SIGIO || signum == SIGKILL || signum == SIGSTOP) {
+        ret = -EINVAL;
+        WRAPPER_RETptr(sighandler_t);
+    }
+    // prepare ksigaction
+    nact.sa_handler = handler;
+    nact.sa_flags = SA_RESTORER;
+    nact.sa_restorer = (__sigrestore_t) __restore;
+    
+    sys_ret = sys_rt_sigaction(signum, &nact, &oact, sizeof(sigset_t));
+    
+    // parse return
+    if (sys_ret < 0) {
+        ret = sys_ret;
+        WRAPPER_RETptr(sighandler_t);
+    }else{
+        ret = (long) oact.sa_handler;
+        WRAPPER_RETptr(sighandler_t);
+    }
+    
+}
+// Please notice that the sigaction data structure used in the C library may
+// be different from that used in the kernel. If the user space and the kernel 
+// space data structure are inconsistent, you will have to perform the 
+// convertion in your wrapper functions.
+int sigaction(int signum, struct sigaction *act, struct sigaction *oldact){
+    long ret;
+    struct ksigaction koact = {0,};
+    struct ksigaction knact = {0,};
+    if (act) {
+        knact.sa_handler = act->sa_handler;
+        knact.sa_mask = act->sa_mask;
+        knact.sa_flags = act->sa_flags | SA_RESTORER;
+        knact.sa_restorer = (__sigrestore_t) __restore;
+    }
+
+    ret = sys_rt_sigaction(signum, &knact, &koact, sizeof(sigset_t));
+    
+    if (ret >= 0 && oldact) {
+        oldact->sa_handler = koact.sa_handler;
+        oldact->sa_mask = koact.sa_mask;
+        oldact->sa_flags = koact.sa_flags;
+        oldact->sa_restorer = (void (*)(void)) koact.sa_restorer;
+    }
+    WRAPPER_RETval(int);
+}
+
+int sigprocmask(int how, sigset_t *set, sigset_t *oldset){
+    long ret = sys_rt_sigprocmask(how, set, oldset, sizeof(sigset_t));
+    WRAPPER_RETval(int);
+}
+int sigemptyset(sigset_t *set){
+    long ret = 0;
+    if (!set) {
+        ret = -EINVAL;
+    }else{
+        memset(set, 0, sizeof(sigset_t));
+    }
+    WRAPPER_RETval(int);
+}
+int sigfillset(sigset_t *set){
+    long ret = 0;
+    if (!set) {
+        ret = -EINVAL;
+    }else{
+        memset(set, 0xFF, sizeof(sigset_t));
+    }
+    WRAPPER_RETval(int);
+}
+int sigaddset(sigset_t *set, int signum){
+    long ret = 0;
+    if (signum < 0 || signum > SIGIO || !set) {
+        ret = -EINVAL;
+        WRAPPER_RETval(int);
+    }
+    *set |= sigmask(signum);
+    WRAPPER_RETval(int);
+}
+int sigdelset(sigset_t *set, int signum){
+    sigset_t oldset = *set;
+    long ret = 0;
+    if (signum < 0 || signum > SIGIO || !set) {
+        ret = -EINVAL;
+        WRAPPER_RETval(int);
+    }
+    *set &= ~sigmask(signum);
+    WRAPPER_RETval(int);
+}
+int sigismember(const sigset_t *set, int signum){
+    unsigned long ret;
+    sigset_t test_sig = sigmask(signum);
+    if (!set) {
+        ret = -EINVAL;
+        WRAPPER_RETval(int);
+    }
+    if (*set & test_sig) {
+        return 1;
+    }else {
+        return 0;
+    }
+}
 int	pipe(int *filedes) {
 	long ret = sys_pipe(filedes);
 	WRAPPER_RETval(int);
@@ -58,8 +175,13 @@ int	pause() {
 }
 
 int	nanosleep(struct timespec *rqtp, struct timespec *rmtp) {
-	long ret = nanosleep(rqtp, rmtp);
+	long ret = nanosleep(rqtp, rmtp); //??
 	WRAPPER_RETval(int);
+}
+
+unsigned int alarm(unsigned int seconds){
+    long ret = sys_alarm(seconds);
+    WRAPPER_RETval(unsigned int);
 }
 
 pid_t	fork(void) {
@@ -165,6 +287,30 @@ uid_t	geteuid() {
 gid_t	getegid() {
 	long ret = sys_getegid();
 	WRAPPER_RETval(uid_t);
+}
+
+int sigpending(sigset_t *set){
+    long ret = sys_rt_sigpending(set, sizeof(sigset_t));
+    WRAPPER_RETval(int);
+}
+
+void setsigjmp(jmp_buf env) {
+    sigset_t oldset;
+    long ret = sys_rt_sigprocmask(0x0, NULL, &oldset, sizeof(sigset_t));
+    if (ret < 0) {
+        errno = -ret;
+        perror("signal mask");
+    }
+    env->mask = oldset;
+    return;
+}
+void longsigjmp(jmp_buf env) {
+    long ret = sys_rt_sigprocmask(SIG_SETMASK, &env->mask, NULL, sizeof(sigset_t));
+    if (ret < 0) {
+        errno = -ret;
+        perror("signal mask");
+    }
+    return;
 }
 
 void bzero(void *s, size_t size) {

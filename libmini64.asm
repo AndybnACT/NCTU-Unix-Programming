@@ -25,11 +25,14 @@ extern	errno
 	gensys   9, mmap
 	gensys  10, mprotect
 	gensys  11, munmap
+    gensys  13, rt_sigaction
+    gensys  14, rt_sigprocmask
 	gensys  22, pipe
 	gensys  32, dup
 	gensys  33, dup2
 	gensys  34, pause
 	gensys  35, nanosleep
+    gensys  37, alarm
 	gensys  57, fork
 	gensys  60, exit
 	gensys  79, getcwd
@@ -51,6 +54,12 @@ extern	errno
 	gensys 106, setgid
 	gensys 107, geteuid
 	gensys 108, getegid
+    gensys 127, rt_sigpending
+
+global __restore: function
+__restore:
+    mov rax, 15
+    syscall
 
 	global open:function
 open:
@@ -101,3 +110,54 @@ sleep_quit:
 	add	rsp, 32
 	ret
 
+extern setsigjmp
+global setjmp:function
+setjmp:
+    push rdi
+%ifdef NASM
+	call [rel setsigjmp wrt ..gotpc]
+%else
+	call [rel setsigjmp wrt ..gotpcrel]
+%endif
+    pop rdi
+    xor rax, rax
+    mov QWORD [rdi     ], rsp
+    mov QWORD [rdi+0x8 ], rbp
+    mov QWORD [rdi+0x10], rbx
+    mov QWORD [rdi+0x18], r12
+    mov QWORD [rdi+0x20], r13
+    mov QWORD [rdi+0x28], r14
+    mov QWORD [rdi+0x30], r15
+    pop  QWORD[rdi+0x38]
+    push QWORD[rdi+0x38]
+    ret
+
+extern longsigjmp
+global longjmp:function
+longjmp:
+    pop rax ; pop the return address as it's no longer used
+    push rdi
+    push rsi
+%ifdef NASM
+	call [rel longsigjmp wrt ..gotpc]
+%else
+	call [rel longsigjmp wrt ..gotpcrel]
+%endif
+    pop rsi
+    pop rdi
+    test rsi, rsi
+    je if_rsi_eq_0
+    jmp normal_rsi
+if_rsi_eq_0:
+    mov rsi, 1
+normal_rsi:
+    mov rax, rsi
+    mov rsp, QWORD [rdi     ]
+    mov rbp, QWORD [rdi+0x8 ]
+    mov rbx, QWORD [rdi+0x10]
+    mov r12, QWORD [rdi+0x18]
+    mov r13, QWORD [rdi+0x20]
+    mov r14, QWORD [rdi+0x28]
+    mov r15, QWORD [rdi+0x30]
+    push QWORD [rdi+0x38]
+    ret
