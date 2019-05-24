@@ -12,7 +12,7 @@ sys_%2:
 
 ; RDI, RSI, RDX, RCX, R8, R9
 
-extern	errno
+extern	priv_errno
 
 	section .data
 
@@ -69,20 +69,20 @@ open:
 open_error:
 	neg	rax
 %ifdef NASM
-	mov	rdi, [rel errno wrt ..gotpc]
+	mov	rdi, [rel priv_errno wrt ..gotpc]
 %else
-	mov	rdi, [rel errno wrt ..gotpcrel]
+	mov	rdi, [rel priv_errno wrt ..gotpcrel]
 %endif
-	mov	[rdi], rax	; errno = -rax
+	mov	[rdi], rax	; priv_errno = -rax
 	mov	rax, -1
 	jmp	open_quit
 open_success:
 %ifdef NASM
-	mov	rdi, [rel errno wrt ..gotpc]
+	mov	rdi, [rel priv_errno wrt ..gotpc]
 %else
-	mov	rdi, [rel errno wrt ..gotpcrel]
+	mov	rdi, [rel priv_errno wrt ..gotpcrel]
 %endif
-	mov	QWORD [rdi], 0	; errno = 0
+	mov	QWORD [rdi], 0	; priv_errno = 0
 open_quit:
 	ret
 

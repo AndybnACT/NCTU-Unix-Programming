@@ -1,9 +1,9 @@
 #include "libmini.h"
 
-long errno;
+long priv_errno;
 
-#define	WRAPPER_RETval(type)	errno = 0; if(ret < 0) { errno = -ret; return -1; } return ((type) ret);
-#define	WRAPPER_RETptr(type)	errno = 0; if(ret < 0) { errno = -ret; return NULL; } return ((type) ret);
+#define	WRAPPER_RETval(type)	priv_errno = 0; if(ret < 0) { priv_errno = -ret; return -1; } return ((type) ret);
+#define	WRAPPER_RETptr(type)	priv_errno = 0; if(ret < 0) { priv_errno = -ret; return NULL; } return ((type) ret);
 
 ssize_t memset(void* dst, char set, ssize_t cnt){
     char *dest = (char*) dst;
@@ -298,7 +298,7 @@ void setsigjmp(jmp_buf env) {
     sigset_t oldset;
     long ret = sys_rt_sigprocmask(0x0, NULL, &oldset, sizeof(sigset_t));
     if (ret < 0) {
-        errno = -ret;
+        priv_errno = -ret;
         perror("signal mask");
     }
     env->mask = oldset;
@@ -307,7 +307,7 @@ void setsigjmp(jmp_buf env) {
 void longsigjmp(jmp_buf env) {
     long ret = sys_rt_sigprocmask(SIG_SETMASK, &env->mask, NULL, sizeof(sigset_t));
     if (ret < 0) {
-        errno = -ret;
+        priv_errno = -ret;
         perror("signal mask");
     }
     return;
@@ -367,12 +367,12 @@ static const char *errmsg[] = {
 
 void perror(const char *prefix) {
 	const char *unknown = "Unknown";
-	long backup = errno;
+	long backup = priv_errno;
 	if(prefix) {
 		write(2, prefix, strlen(prefix));
 		write(2, ": ", 2);
 	}
-	if(errno < PERRMSG_MIN || errno > PERRMSG_MAX) write(2, unknown, strlen(unknown));
+	if(priv_errno < PERRMSG_MIN || priv_errno > PERRMSG_MAX) write(2, unknown, strlen(unknown));
 	else write(2, errmsg[backup], strlen(errmsg[backup]));
 	write(2, "\n", 1);
 	return;

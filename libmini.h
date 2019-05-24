@@ -106,7 +106,7 @@ typedef struct jmp_buf_s {
 	sigset_t mask;
 } jmp_buf[1];
 
-extern long errno;
+extern long priv_errno;
 
 #define	NULL		((void*) 0)
 
