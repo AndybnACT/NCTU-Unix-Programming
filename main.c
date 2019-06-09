@@ -20,12 +20,12 @@ int state_cleanup(void){
     return 0;
 }
 
-int main(int argc, char const *argv[]) {
+int main(int argc, char *argv[]) {
     char *cmdbuf = NULL;
     unsigned long bufsize = 0;
     int ret = -1;
     if (argc == 2) {
-        dprintf(0, "argc = 2, not implemented!\n");
+        load_prog(2, argv);
     }else if (argc != 1) {
         printf("Usage: ./sdb [program to debug]\n");
         goto bad_exit;
@@ -34,6 +34,7 @@ int main(int argc, char const *argv[]) {
     
     while (1) {
     // get input command  
+        printf("sdb> ");
         ret = getline(&cmdbuf, &bufsize, stdin);
         if (ret == -1) {
             if (errno) {

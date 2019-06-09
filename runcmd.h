@@ -7,10 +7,10 @@
 extern int STATE;
 
 struct elf{
-    unsigned long entry;
-    unsigned long vaddr;
-    unsigned long offset;
-    long size;
+    unsigned long long entry;
+    unsigned long long vaddr;
+    unsigned long long offset;
+    long long size;
 };
 
 struct prog_ctx {
@@ -40,3 +40,8 @@ struct command {
 
 int runcmd(char *cmd);
 int load_prog(int argc, char **argv);
+int vmmap(int argc, char **argv);
+
+int sdb_run(int argc, char** argv);
+int sdb_start(int argc, char** argv);
+int sdb_cont(int argc, char** argv);

@@ -7,8 +7,12 @@
 int help(int argc, char **argv);
 
 struct command Commands[] = {
-    {"help", "h",  "- help: show this message", help},
-    {"load", NULL, "- load {path/to/a/program}: load a program", load_prog}
+    {"help"  , "h",  "- help: show this message", help},
+    {"vmmap" , "m",  "- vmmap: show memory layout", vmmap},
+    {"run"   , "r",  "- run: run the program", sdb_run},
+    {"cont"  , "c",  "- cont: continue execution", sdb_cont},
+    {"start" , NULL, "- start: start the program and stop at the first instruction", sdb_start},
+    {"load"  , NULL, "- load {path/to/a/program}: load a program", load_prog}
 };
 const int NCOMMAND = (sizeof(Commands)/sizeof(struct command));
 
@@ -54,7 +58,7 @@ int runcmd(char *buf){
             buf++;
         
     }
-    for (size_t i = 0; i < argc; i++) {
+    for (int i = 0; i < argc; i++) {
         dprintf(0, "argv[%d] = %s\n", i, argv[i]);
     }
     
