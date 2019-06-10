@@ -11,6 +11,7 @@ struct command Commands[] = {
     {"vmmap" , "m",  "- vmmap: show memory layout", vmmap},
     {"run"   , "r",  "- run: run the program", sdb_run},
     {"cont"  , "c",  "- cont: continue execution", sdb_cont},
+    {"dump"  , "x",  "- dump addr [length]: dump memory content", sdb_dump},
     {"disasm", "d",  "- disasm addr: disassemble instructions in a file or a memory region", dis_asm},
     {"start" , NULL, "- start: start the program and stop at the first instruction", sdb_start},
     {"get"   , "g",  "- get reg: get a single value from a register", sdb_getreg},

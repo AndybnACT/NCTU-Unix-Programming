@@ -10,6 +10,7 @@
 unsigned long long str2num(char *str){
     char *endptr;
     unsigned long long ret;
+    errno = 0;
     if (!(*str)) {
         printf("** cannot convert null string to number\n");
         return -1;

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
+#include <errno.h>
 #include "debug.h"
 #include "util.h"
 #include "runcmd.h"
@@ -13,6 +14,12 @@ int tracee_startup(unsigned long);
 int tracee_cont(void);
 int tracee_getallregs(void);
 int tracee_setallregs(void);
+int tracee_setmem(unsigned long long addr, 
+                  unsigned long long *data, int nrdata);
+int tracee_getmem(unsigned long long addr, 
+                unsigned long long *data,
+                unsigned long long **dataptr,
+                int nrdata );
 
 int sdb_run(int argc, char** argv){
     ARGC_CHK(argc, 1);
@@ -110,6 +117,42 @@ int sdb_setreg(int argc, char **argv){
     return 0;
 }
 
+int sdb_dump(int argc, char **argv){
+    static unsigned long long dump[10]; // 80 bytes
+    static unsigned long long addr = -1;
+    unsigned long long *dumpped;
+    // check state
+    if (!(STATE & STATE_RUNNING)) {
+        printf("** there is no running debugged process \n");
+        return 0;
+    }
+    // parse addr
+    if (argc == 1) {
+        if (addr == -1) {
+            printf("** no addr is given\n");
+            return 0;
+        }
+    }else if (argc == 2) {
+        addr = str2num(argv[1]);
+        if (addr == -1) {
+            printf("** Cannot recognize address: %s\n", argv[1]);
+            return -1;
+        }
+    }else{
+        ARGC_CHK(argc, 2);
+    }
+    // get data
+    if (tracee_getmem(addr, dump, &dumpped, 10)) {
+        printf("** cannot dump the specified memory region\n");
+    }
+    // display
+    long long size = (long long)((char*)dumpped - (char*)dump);
+    dump_hex((char*) dump, addr, size);
+    // success, update addr
+    addr += size;
+    return 0;
+}
+
 //========== ptrace related
 
 int tracee_getallregs(void){
@@ -134,6 +177,47 @@ int tracee_setallregs(void){
     return 0;
 }
 
+int tracee_setmem(unsigned long long addr, 
+                  unsigned long long *data,
+                  unsigned long long **dataptr, // used to indicate the final pos
+                  int nrdata){
+    pid_t child = prog.pid;
+    int ret;
+    *dataptr = data;
+    for (size_t i = 0; i < nrdata; i++) {
+        ret = ptrace(PTRACE_POKEDATA, child, (void*) addr, *data);
+        if (ret == -1)
+            goto failed;
+        addr += 8;
+        data += 1;
+        *dataptr += 1;
+    }
+    return 0;
+failed:
+    perror("ptrace peekdata ");
+    return -1;
+}
+
+int tracee_getmem(unsigned long long addr, 
+                  unsigned long long *data,
+                  unsigned long long **dataptr,
+                  int nrdata ){
+    pid_t child = prog.pid;
+    *dataptr = data;
+    for (size_t i = 0; i < nrdata; i++) {
+        errno = 0;
+        *data = ptrace(PTRACE_PEEKDATA, child, (void*) addr, NULL);
+        if (*data == -1 && errno)
+            goto failed;
+        addr += 8;
+        data += 1;
+        *dataptr += 1;
+    }
+    return 0;
+failed:
+    perror("ptrace peekdata ");
+    return -1;
+}
 
 
 int tracee_stop_callback(int status){
