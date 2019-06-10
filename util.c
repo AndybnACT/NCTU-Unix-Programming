@@ -2,8 +2,10 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <errno.h>
+#include <string.h>
 
 #include "debug.h"
+#include "regs.h"
 
 unsigned long long str2num(char *str){
     char *endptr;
@@ -24,6 +26,46 @@ unsigned long long str2num(char *str){
     return ret;
     
 }
+
+void dump_all_regs(struct user_regs_struct *regs){
+    size_t i;
+    for (i = 0; i < NREGS; i++) {
+        printf("%s = %lld (%llx)\n",
+               REGS[i].name, REGS[i].get(regs), REGS[i].get(regs));
+    }
+}
+
+int dump_reg(struct user_regs_struct *regs, char *regname){
+    size_t i;
+    for (i = 0; i < NREGS; i++) {
+        if (strcmp(regname, REGS[i].name) == 0) {
+            printf("%s = %lld (%llx)\n", 
+                   REGS[i].name, REGS[i].get(regs), REGS[i].get(regs));
+            goto success;
+        }
+    }
+//failed:
+    printf("** warning, register '%s' not found\n", regname);
+    return -1;
+success:
+    return 0;
+}
+
+int set_reg(struct user_regs_struct *regs, char *regname, unsigned long long val){
+    size_t i;
+    for (i = 0; i < NREGS; i++) {
+        if (strcmp(regname, REGS[i].name) == 0) {
+            REGS[i].set(regs, val);
+            goto success;
+        }
+    }
+//failed:
+    printf("** warning, register '%s' not found\n", regname);
+    return -1;
+success:
+    return 0;
+}
+
 
 void dump_hex(char *str, long long start, long long size){
     int wcnt = 0;

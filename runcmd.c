@@ -13,6 +13,9 @@ struct command Commands[] = {
     {"cont"  , "c",  "- cont: continue execution", sdb_cont},
     {"disasm", "d",  "- disasm addr: disassemble instructions in a file or a memory region", dis_asm},
     {"start" , NULL, "- start: start the program and stop at the first instruction", sdb_start},
+    {"get"   , "g",  "- get reg: get a single value from a register", sdb_getreg},
+    {"set"   , "s",  "- set reg val: get a single value to a register", sdb_setreg},
+    {"getregs", NULL,"- getregs: show registers", sdb_getregs },
     {"load"  , NULL, "- load {path/to/a/program}: load a program", load_prog}
 };
 const int NCOMMAND = (sizeof(Commands)/sizeof(struct command));

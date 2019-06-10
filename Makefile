@@ -1,6 +1,6 @@
 TARGET = sdb
 SOURCE = main.c 
-OBJ    = main.o runcmd.o load.o elftool.o sdb-core.o
+OBJ    = main.o runcmd.o load.o elftool.o sdb-core.o util.o disasm.o
 
 CC = gcc
 CFLAGS = -Wall -g 
@@ -12,10 +12,13 @@ clean:
 	$(RM) $(OBJ)
 
 $(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -lelf $(OBJ) -o $(TARGET)
+	$(CC) $(CFLAGS) -lelf -lcapstone $(OBJ) -o $(TARGET)
 
 load.o: load.c runcmd.h elftool.o
 	$(CC) $(CFLAGS) -c load.c -o load.o
+
+util.o: regs.h util.c util.h
+	$(CC) $(CFLAGS) -c util.c -o util.o
 
 elfdemo: elfdemo.c elftool.o
 	$(CC) $(CFLAGS) -c elfdemo.c -o elfdemo.o

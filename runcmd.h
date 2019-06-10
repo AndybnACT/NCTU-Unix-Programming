@@ -55,5 +55,8 @@ int vmmap(int argc, char **argv);
 int sdb_run(int argc, char** argv);
 int sdb_start(int argc, char** argv);
 int sdb_cont(int argc, char** argv);
+int sdb_getregs(int argc, char**argv);
+int sdb_getreg(int argc, char**argv);
+int sdb_setreg(int argc, char**argv);
 
 int dis_asm(int argc, char** argv);

@@ -6,10 +6,13 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include "debug.h"
+#include "util.h"
 #include "runcmd.h"
 
 int tracee_startup(unsigned long);
 int tracee_cont(void);
+int tracee_getallregs(void);
+int tracee_setallregs(void);
 
 int sdb_run(int argc, char** argv){
     ARGC_CHK(argc, 1);
@@ -49,7 +52,90 @@ int sdb_start(int argc, char** argv){
     return tracee_startup(1);
 }
 
+int sdb_getregs(int argc, char**argv){
+    ARGC_CHK(argc, 1);
+    if (!(STATE & STATE_RUNNING)) {
+        printf("** there is no debugged process running\n");
+        return 0;
+    }
+    if(tracee_getallregs())
+        return -1;
+    
+    dump_all_regs(&prog.regs);
+    
+    return 0;
+};
+
+int sdb_getreg(int argc, char **argv){
+    ARGC_CHK(argc, 2);
+    if (!(STATE & STATE_RUNNING)) {
+        printf("** there is no running debugged process \n");
+        return 0;
+    }
+    if(tracee_getallregs())
+        return -1;
+    
+    if (dump_reg(&prog.regs, argv[1])) {
+        printf("** try getregs to see available registers provided by sdb\n");
+    }
+
+    return 0;
+}
+
+int sdb_setreg(int argc, char **argv){
+    unsigned long long val;
+    ARGC_CHK(argc, 3);
+    if (!(STATE & STATE_RUNNING)) {
+        printf("** there is no running debugged process \n");
+        return 0;
+    }
+    // get regs
+    if(tracee_getallregs())
+        return -1;
+    // str2num
+    val = str2num(argv[2]);
+    if (val == -1) {
+        printf("** cannot recognize input number\n");
+        return 0;
+    }
+    // setreg
+    if (set_reg(&prog.regs, argv[1], val)) {
+        printf("** try getregs to see available registers provided by sdb\n");
+        return 0;
+    }
+    // commit
+    if (tracee_setallregs())
+        return -1;
+
+    return 0;
+}
+
 //========== ptrace related
+
+int tracee_getallregs(void){
+    int ret;
+    pid_t child = prog.pid;
+    ret = ptrace(PTRACE_GETREGS, child, 0, &prog.regs);
+    if (ret == -1) {
+        perror("ptrace getregs ");
+        return -1;
+    }
+    return 0;
+}
+
+int tracee_setallregs(void){
+    int ret;
+    pid_t child = prog.pid;
+    ret = ptrace(PTRACE_SETREGS, child, 0, &prog.regs);
+    if (ret == -1) {
+        perror("ptrace settregs ");
+        return -1;
+    }
+    return 0;
+}
+
+
+
 int tracee_stop_callback(int status){
     if (WIFEXITED(status)) {
         int exitcode = WEXITSTATUS(status);
