@@ -1,9 +1,36 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
+
 #include "runcmd.h"
 #include "elftool.h"
+#include "util.h"
 
+
+int load_code(struct disasm *load){
+    char *code = (char*) malloc(prog.load.size);
+    if (lseek(prog.fd, prog.load.offset, SEEK_SET) != prog.load.offset) {
+        perror("lseek ");
+        goto free_exit;
+    }
+    if (read(prog.fd, code, prog.load.size) != prog.load.size) {
+        perror("read ");
+        goto free_exit;
+    }
+    dump_hex(code, prog.load.offset, prog.load.size);
+    
+    load->data = code;
+    load->size = prog.load.size;
+    load->cur_va = prog.load.vaddr;
+    load->cur = 0;
+
+    return 0;
+free_exit:
+    free(code);
+    return -1;
+}
 
 int load_prog(int argc, char **argv){
     int i;
@@ -28,6 +55,7 @@ int load_prog(int argc, char **argv){
 		return 0;
 	}
     
+    prog.fd = dup(eh->fd);
     prog.progname = strdup(argv[1]);
     
     if(elf_load_all(eh) < 0) {
@@ -67,6 +95,14 @@ quit:
 	}
 	return -1;
 success:
+    elf_close(eh);
+    eh = NULL;
+    
+    if (load_code(&prog.asm_file)) {
+        printf("** error reading code\n");
+        return -1;
+    }
+    
     STATE = STATE_LOAD;
     printf("** program '%s' loaded."
            " entry point 0x%llx, vaddr 0x%llx, offset 0x%llx, size 0x%llx\n"
@@ -76,32 +112,6 @@ success:
 }
 
 
-static int 
-read_mapping (FILE *mapfile, 
-	      unsigned long long *addr, 
-	      unsigned long long *endaddr, 
-	      char *permissions, 
-	      unsigned long long *offset, 
-	      char *device, 
-	      unsigned long long *inode, 
-	      char *filename)
-{
-  int ret = fscanf (mapfile,  "%llx-%llx %s %llx %s %llx", 
-		    addr, endaddr, permissions, offset, device, inode);
-
-  if (ret > 0 && ret != EOF && *inode != 0)
-    {
-      ret += fscanf (mapfile, "%s\n", filename);
-    }
-  else
-    {
-      char buf[255];
-      filename[0] = '\0';	/* no filename */
-      fgets(buf, 255, mapfile);
-      sscanf(buf, "%s\n", filename);
-    }
-  return (ret != 0 && ret != EOF);
-}
 
 #define VMMAP_FORMAT_STR "%016llx-%016llx %c%c%c %-10llx %s\n"
 
