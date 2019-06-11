@@ -1,4 +1,5 @@
 #include <sys/user.h>
+#include "break.h"
 
 #define STATE_NONE 0x0
 #define STATE_LOAD 0x1
@@ -29,6 +30,7 @@ struct prog_ctx {
     // char *codebuf;
     struct disasm asm_file;
     struct disasm asm_raw;
+    struct breakpoint *b;
 };
 
 extern struct prog_ctx prog;
@@ -59,5 +61,12 @@ int sdb_getregs(int argc, char**argv);
 int sdb_getreg(int argc, char**argv);
 int sdb_setreg(int argc, char**argv);
 int sdb_dump(int argc, char **argv);
+int sdb_break(int argc, char **argv);
+int sdb_listb(int argc, char **argv);
+int sdb_delb(int argc, char **argv);
+int sdb_si(int argc, char **argv);
 
 int dis_asm(int argc, char** argv);
+
+#define STOP_BREAK_NOT_FOUND 0xFC
+#define STOP_EXIT            0xEF

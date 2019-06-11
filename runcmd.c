@@ -8,12 +8,16 @@ int help(int argc, char **argv);
 
 struct command Commands[] = {
     {"help"  , "h",  "- help: show this message", help},
+    {"break" , "b",  "- break {instruction-address}: add a break point", sdb_break},
+    {"list"  , "l",  "- list: list break points", sdb_listb},
+    {"delete", NULL, "- delete {break-point-id}: remove a break point", sdb_delb},
     {"vmmap" , "m",  "- vmmap: show memory layout", vmmap},
     {"run"   , "r",  "- run: run the program", sdb_run},
     {"cont"  , "c",  "- cont: continue execution", sdb_cont},
     {"dump"  , "x",  "- dump addr [length]: dump memory content", sdb_dump},
     {"disasm", "d",  "- disasm addr: disassemble instructions in a file or a memory region", dis_asm},
     {"start" , NULL, "- start: start the program and stop at the first instruction", sdb_start},
+    {"si"    , NULL, "- si: step into instruction", sdb_si},
     {"get"   , "g",  "- get reg: get a single value from a register", sdb_getreg},
     {"set"   , "s",  "- set reg val: get a single value to a register", sdb_setreg},
     {"getregs", NULL,"- getregs: show registers", sdb_getregs },

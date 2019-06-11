@@ -1,3 +1,4 @@
+#include <stdio.h>
 #define CONFIG_DEBUG_LEVEL 5
 
 #define dprintf(lvl, fmt, args...){                             \

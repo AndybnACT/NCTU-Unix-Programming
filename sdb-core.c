@@ -9,17 +9,23 @@
 #include "debug.h"
 #include "util.h"
 #include "runcmd.h"
+#include "break.h"
 
 int tracee_startup(unsigned long);
 int tracee_cont(void);
 int tracee_getallregs(void);
 int tracee_setallregs(void);
 int tracee_setmem(unsigned long long addr, 
-                  unsigned long long *data, int nrdata);
+                unsigned long long *data,
+                unsigned long long **dataptr,
+                int nrdata );
 int tracee_getmem(unsigned long long addr, 
                 unsigned long long *data,
                 unsigned long long **dataptr,
                 int nrdata );
+int tracee_setbreak(struct breakpoint *b);
+int tracee_revisebreak(struct breakpoint *b);
+int tracee_si(void);
 
 int sdb_run(int argc, char** argv){
     ARGC_CHK(argc, 1);
@@ -153,6 +159,81 @@ int sdb_dump(int argc, char **argv){
     return 0;
 }
 
+int sdb_break(int argc, char **argv){
+    ARGC_CHK(argc, 2);
+    struct breakpoint *new;
+    if (!(STATE & STATE_ANY)) {
+        printf("** program not loaded\n");
+        return 0;
+    }
+    
+    if (!(new = break_init())) {
+        printf("cannot create metadata for the new breakpoint\n");
+        return -1;
+    }
+    // get address
+    new->addr = str2num(argv[1]);
+    if (new->addr == -1) {
+        printf("** cannot recognize input number\n");
+        goto failed_free;
+    }
+    
+    
+    //set breakpoint 
+    if (STATE & STATE_RUNNING) {
+        if (tracee_setbreak(new)) {
+            printf("** error setting breakpoint\n");
+            goto failed_free;
+        }
+    }
+    new->enable = 1;
+    new->activate = tracee_setbreak;
+    new->deactivate = tracee_revisebreak;
+    new->dis = capstone_dis_break;
+    
+    // commit to breakpoint list
+    if (break_insert(&prog.b, new))
+        goto failed_free;
+    
+    return 0;
+
+failed_free:
+    free(new);
+    return 0;    
+}
+
+int sdb_listb(int argc, char **argv){
+    ARGC_CHK(argc, 1);
+    dbg_dump_breaks(CONFIG_DEBUG_LEVEL+1, prog.b);
+    return 0;
+}
+
+int sdb_delb(int argc, char **argv){
+    int id;
+    ARGC_CHK(argc, 2);
+    
+    id = str2num(argv[1]);
+    if (id == -1) {
+        printf("** Cannot recognize id: %s\n", argv[1]);
+        return -1;
+    }
+    
+    if (break_remove_by_id(&prog.b, id))
+        printf("cannot find breakpoint id with %d\n", id);
+    
+    return 0;
+}
+
+int sdb_si(int argc, char **argv){
+    ARGC_CHK(argc, 1);
+    
+    if (!(STATE & STATE_RUNNING)) {
+        printf("** program must be started before it can be single-stepped\n");
+        return 0;
+    }
+    
+    return tracee_si();
+}
 //========== ptrace related
 
 int tracee_getallregs(void){
@@ -220,6 +301,47 @@ failed:
 }
 
 
+int tracee_setbreak(struct breakpoint *b){
+    unsigned long long *ptr;
+    unsigned long long trap;
+    // preserve tracee's original code
+    if (tracee_getmem(b->addr, &b->data, &ptr, 1))
+        goto failed;
+    trap = b->data;
+    trap &= 0xffffffffffffff00;
+    trap |= 0xcc;
+    // modify code area
+    if (tracee_setmem(b->addr, &trap, &ptr, 1))
+        goto failed;
+    
+    b->activated = 1;
+    return 0;
+failed:
+    dbg_show_break(0, b);
+    return -1;
+}
+
+int tracee_revisebreak(struct breakpoint *b){
+    unsigned long long *ptr;
+    unsigned long long trap;
+    // get tracee's (broken) code
+    if (tracee_getmem(b->addr, &trap, &ptr, 1))
+        goto failed;
+        
+    trap &= 0xffffffffffffff00;
+    trap |= b->data & 0xFF;
+    
+    // revise to original
+    if (tracee_setmem(b->addr, &trap, &ptr, 1))
+        goto failed;
+    
+    b->activated = 0;
+    return 0;
+failed:
+    dbg_show_break(0, b);
+    return -1;
+}
+
 int tracee_stop_callback(int status){
     if (WIFEXITED(status)) {
         int exitcode = WEXITSTATUS(status);
@@ -228,16 +350,52 @@ int tracee_stop_callback(int status){
                (exitcode == 0)? "normally":"abnormally",
                exitcode);
         STATE &= ~STATE_RUNNING;
+        break_clear_activate_all(prog.b);
         prog.pid = -1;
+        return STOP_EXIT;
+    }else if (WIFSTOPPED(status)) {
+        dprintf(0, "stop status = 0x%x\n", WSTOPSIG(status));
+        // get rip
+        tracee_getallregs();
+        unsigned long long rip = prog.regs.rip - 1;
+        
+        // handle breakpoint
+        dprintf(0, "child process stopped, checking breakpoints\n");
+        if (break_hit(prog.b, rip)) {
+            dprintf(0, "child is stopped but not stopped by any breakpoint\n");
+            dprintf(0, "tracee_stop_callback not implemented!\n");
+            dbg_dump_breaks(0, prog.b);
+            return STOP_BREAK_NOT_FOUND;
+        }
+        
+        // reset rip
+        prog.regs.rip = rip; // ugly
+        tracee_setallregs();
         return 0;
     }
     dprintf(0, "tracee_stop_callback not implemented!\n");
     return 0;
 }
 
+int tracee_si(void){
+    pid_t child = prog.pid;
+    int status;
+    ptrace(PTRACE_SINGLESTEP, child, 0, 0);
+    if (waitpid(child, &status, 0) < 0) {
+        perror("waitpid");
+    }
+    return tracee_stop_callback(status);
+}
+
+
 int tracee_cont(void){
     pid_t child = prog.pid;
     int status;
+    
+    if (tracee_si() == STOP_EXIT)
+        return 0;
+    break_activate_all(prog.b);
+    
     ptrace(PTRACE_CONT, child, 0, 0);
     if (waitpid(child, &status, 0) < 0) {
         perror("waitpid ");
@@ -274,6 +432,7 @@ int tracee_startup(unsigned long stop){
             perror("waitpid: ");
         }
         assert(WIFSTOPPED(status));
+        break_activate_all(prog.b);
         ptrace(PTRACE_SETOPTIONS, child, 0, PTRACE_O_EXITKILL);
         if (!stop) {
             ptrace(PTRACE_CONT, child, 0, 0);

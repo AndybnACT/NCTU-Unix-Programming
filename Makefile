@@ -1,6 +1,6 @@
 TARGET = sdb
 SOURCE = main.c 
-OBJ    = main.o runcmd.o load.o elftool.o sdb-core.o util.o disasm.o
+OBJ    = main.o runcmd.o load.o elftool.o sdb-core.o util.o disasm.o break.o
 
 CC = gcc
 CFLAGS = -Wall -g 
@@ -16,6 +16,9 @@ $(TARGET): $(OBJ)
 
 load.o: load.c runcmd.h elftool.o
 	$(CC) $(CFLAGS) -c load.c -o load.o
+
+sdb-core.o: sdb-core.c break.o runcmd.o util.o
+	$(CC) $(CFLAGS) -c sdb-core.c -o sdb-core.o
 
 util.o: regs.h util.c util.h
 	$(CC) $(CFLAGS) -c util.c -o util.o

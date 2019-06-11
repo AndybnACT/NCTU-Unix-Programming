@@ -4,6 +4,8 @@
 #include "runcmd.h"
 #include "debug.h"
 #include "util.h"
+#include "break.h"
+
 csh *Handle = NULL;
 int capstone_dis(unsigned long long addr);
 
@@ -120,4 +122,23 @@ int capstone_dis(unsigned long long addr){
         dprintf(0, "Does not support disassemble at run time\n");
     }
     return -1;
+}
+
+int capstone_dis_break(struct breakpoint *b){ // ugly implementation 
+    cs_insn *insn;
+    int count;
+    if (!Handle) {
+        Handle = (csh *) malloc(sizeof(csh));
+        if (cs_open(CS_ARCH_X86, CS_MODE_64, Handle) != CS_ERR_OK){
+            perror("cs_open ");
+            return -1;
+        }
+    }
+    
+    count = cs_disasm(*Handle, (uint8_t *) &b->data, 8,
+                      b->addr, 1, &insn);
+    if (count != 1)
+        return -1;
+    show_insn(insn, 1);
+    return 0;
 }
