@@ -24,7 +24,7 @@ int load_code(struct disasm *load){
     load->data = code;
     load->size = prog.load.size;
     load->cur_va = prog.load.vaddr;
-    load->cur = 0;
+    // load->cur = 0;
 
     return 0;
 free_exit:
@@ -64,6 +64,7 @@ int load_prog(int argc, char **argv){
     }
     
     prog.load.entry = eh->entrypoint;
+    prog.is_dyn = (eh->ehdr.ptr64->e_type == ET_DYN) ? 1:0;
 
     for(tab = eh->strtab; tab != NULL; tab = tab->next) {
         if(tab->id == eh->shstrndx) break;

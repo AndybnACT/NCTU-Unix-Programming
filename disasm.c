@@ -115,11 +115,47 @@ int _disassemble(struct disasm *dis, unsigned long long addr){
 
 // the function presumes that Handle is opened and STATE is either loaded or running 
 int capstone_dis(unsigned long long addr){
+    static int checkpoint = 0;
     if (!(STATE & STATE_RUNNING)) { // loaded but not run
         return _disassemble(&prog.asm_file, addr);
     }else { // running
-        /* code */
-        dprintf(0, "Does not support disassemble at run time\n");
+        cs_insn *insn;
+        unsigned long long start;
+        unsigned long long *rptr;
+        int nr;
+        struct disasm *dis = &prog.asm_raw;
+        if (!checkpoint) {
+            dis->size = 1024;
+            dis->data = (char*) malloc(dis->size);
+            dis->cur_va = prog.asm_file.cur_va + prog.memoff;
+            checkpoint = 1;
+        }
+        start = (addr) ? addr:dis->cur_va;
+        
+        
+        
+        // load the entire code area
+        nr = dis->size/8;
+        break_deactivate_all(prog.b);
+        tracee_getmem(start, 
+            (unsigned long long*) dis->data,
+                &rptr, 
+                nr);
+        break_activate_all(prog.b);       
+        
+        if ((char* )rptr - dis->data != dis->size)
+            dprintf(0, "reading from child does not complete\n");
+        
+        
+        // disassemble
+        nr = cs_disasm(*Handle, (uint8_t*) dis->data, 
+                       dis->size, start, 10, &insn);
+        if (nr < 0) {
+            printf("** error disassembling given code\n");
+        }
+        show_insn(insn, nr);
+        cs_free(insn, nr);
+        return 0;
     }
     return -1;
 }
@@ -140,5 +176,6 @@ int capstone_dis_break(struct breakpoint *b){ // ugly implementation
     if (count != 1)
         return -1;
     show_insn(insn, 1);
+    cs_free(insn, count);
     return 0;
 }

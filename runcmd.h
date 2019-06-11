@@ -18,7 +18,7 @@ struct disasm {
     char *data;
     int size;
     unsigned long long cur_va;
-    int cur;
+    // int cur;
 };
 
 struct prog_ctx {
@@ -31,6 +31,10 @@ struct prog_ctx {
     struct disasm asm_file;
     struct disasm asm_raw;
     struct breakpoint *b;
+    // if ELF has type ET_DYN (shared object),
+    // we need to 
+    int is_dyn;
+    unsigned long long memoff;
 };
 
 extern struct prog_ctx prog;
@@ -67,6 +71,11 @@ int sdb_delb(int argc, char **argv);
 int sdb_si(int argc, char **argv);
 
 int dis_asm(int argc, char** argv);
+
+int tracee_getmem(unsigned long long addr, 
+                unsigned long long *data,
+                unsigned long long **dataptr,
+                int nrdata );
 
 #define STOP_BREAK_NOT_FOUND 0xFC
 #define STOP_EXIT            0xEF

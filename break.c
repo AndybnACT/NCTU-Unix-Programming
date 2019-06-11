@@ -120,6 +120,17 @@ int break_hit(struct breakpoint *head, unsigned long long addr){
     return 0;
 }
 
+int break_set_offset_all(struct breakpoint *head, unsigned long long off){
+    LIST_FOR_EACH(head){
+        if (head->activated) {
+            dprintf(0, "bug!! function should only be called when breakpoint is deactivated\n");
+        }
+        head->addr += off;
+    }
+    return 0;
+}
+
+
 int break_activate_all(struct breakpoint *head){
     int ret;
     LIST_FOR_EACH(head){
@@ -132,6 +143,20 @@ int break_activate_all(struct breakpoint *head){
     return 0;
 }
 
+
+int break_deactivate_all(struct breakpoint *head){
+    int ret;
+    LIST_FOR_EACH(head){
+        if (head->enable && head->activated) {
+            ret = head->deactivate(head);
+            if (ret)
+                return ret;
+        }
+    }
+    return 0;
+}
+
+// only be called when process terminated
 int break_clear_activate_all(struct breakpoint *head){
     // int ret;
     LIST_FOR_EACH(head){

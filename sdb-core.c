@@ -6,6 +6,7 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <string.h>
 #include "debug.h"
 #include "util.h"
 #include "runcmd.h"
@@ -19,10 +20,10 @@ int tracee_setmem(unsigned long long addr,
                 unsigned long long *data,
                 unsigned long long **dataptr,
                 int nrdata );
-int tracee_getmem(unsigned long long addr, 
-                unsigned long long *data,
-                unsigned long long **dataptr,
-                int nrdata );
+// int tracee_getmem(unsigned long long addr, 
+//                 unsigned long long *data,
+//                 unsigned long long **dataptr,
+//                 int nrdata );
 int tracee_setbreak(struct breakpoint *b);
 int tracee_revisebreak(struct breakpoint *b);
 int tracee_si(void);
@@ -403,6 +404,61 @@ int tracee_cont(void){
     return tracee_stop_callback(status);
 }
 
+int tracee_set_memoff(pid_t p){
+    unsigned long long st, ed, off, a2;
+    char procname[255];
+    char dev[255];
+    char filename[255];
+    char *prog_name;
+    char perm[10];
+    FILE *f;
+    int i;
+    
+    if (!prog.is_dyn) {
+        prog.memoff = 0;
+        return 0;
+    }
+    
+    snprintf(procname, 255, "/proc/%d/maps", p);
+    
+    dprintf(1, "opening proc file\n");
+    f = fopen(procname, "r");
+    if (!f) {
+        perror("error opening file ");
+        return -1;
+    }
+    
+    for (i = strlen(prog.progname) - 1; i >= 0; i--) {
+        if (prog.progname[i] == '/')
+            break;
+    }
+    prog_name = prog.progname + i;
+    
+    prog.memoff = 0;
+    while (read_mapping(f, &st, &ed, perm, &off, dev, &a2, filename)){
+        if (perm[2] == 'x' && strstr(filename, prog_name)) {
+            prog.memoff = st;
+            break;
+        }else{
+            dprintf(0, "finding relocated address of the program\n");
+        }
+    }
+    if (!prog.memoff) {
+        printf("** Error, cannot find relocated addr of the program\n");
+    }
+    
+    if (off) {
+        printf("** Warning, loaded offset %llx != 0 \n", off);
+        prog.memoff -= off;
+    }
+    
+    fclose(f);
+    dprintf(0, "program is actually loaded at %llx due to ASLR\n", prog.memoff);
+    return 0;
+}
+
+
+
 int tracee_startup(unsigned long stop){
     pid_t child;
     if ((child = fork()) < 0) {
@@ -432,6 +488,8 @@ int tracee_startup(unsigned long stop){
             perror("waitpid: ");
         }
         assert(WIFSTOPPED(status));
+        tracee_set_memoff(child);
+        break_set_offset_all(prog.b, prog.memoff);
         break_activate_all(prog.b);
         ptrace(PTRACE_SETOPTIONS, child, 0, PTRACE_O_EXITKILL);
         if (!stop) {

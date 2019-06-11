@@ -22,7 +22,9 @@ int break_insert(struct breakpoint **head, struct breakpoint *node);
 int break_remove_by_id(struct breakpoint **head, int id);
 // struct breakpoint* break_findby_addr(struct breakpoint *head, unsigned long long addr);
 int break_hit(struct breakpoint *head, unsigned long long addr);
+int break_set_offset_all(struct breakpoint *head, unsigned long long off);
 int break_activate_all(struct breakpoint *head);
+int break_deactivate_all(struct breakpoint *head);
 int break_clear_activate_all(struct breakpoint *head);
 int capstone_dis_break(struct breakpoint *b);
 #endif
