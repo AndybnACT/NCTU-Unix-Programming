@@ -122,8 +122,10 @@ int sdb_setreg(int argc, char **argv){
 }
 
 int sdb_dump(int argc, char **argv){
-    static unsigned long long dump[10]; // 80 bytes
+    unsigned long long *dump;
     unsigned long long addr = prog.sdb_dumpaddr;
+    unsigned long long len = 80;
+    unsigned long long buflen, nrlong;
     unsigned long long *dumpped;
     // check state
     if (!(STATE & STATE_RUNNING)) {
@@ -136,25 +138,43 @@ int sdb_dump(int argc, char **argv){
             printf("** no addr is given\n");
             return 0;
         }
-    }else if (argc == 2) {
+    }else if (argc == 2 || argc == 3 ) {
         addr = str2num(argv[1]);
         if (addr == -1) {
             printf("** Cannot recognize address: %s\n", argv[1]);
             return 0;
         }
+        if (argc == 3){
+            len = str2num(argv[2]);
+            if (len <= 0) {
+                printf("** invalid length: %s\n", argv[2]);
+                return 0;
+            }
+        }
     }else{
         ARGC_CHK(argc, 2);
     }
     // get data
-    if (tracee_getmem(addr, dump, &dumpped, 10)) {
+    buflen = (len+7)&(~0x7);
+    nrlong = buflen/8;
+    dump = (unsigned long long *) malloc(buflen);
+    if (!dump) {
+        perror("cannot allocate buffer for dumpping ");
+        return 0;
+    }
+    dprintf(0, "buf size %d, %d\n", buflen, nrlong);
+    if (tracee_getmem(addr, dump, &dumpped, nrlong)) {
         printf("** cannot fully dump the specified memory region\n");
     }
     // display
     long long size = (long long)((char*)dumpped - (char*)dump);
+    dprintf(0, "size  %d\n", size );
+    size = size > len ? len : size;
     dump_hex((char*) dump, addr, size);
     // success, update addr
     addr += size;
     prog.sdb_dumpaddr = addr;
+    free(dump);
     return 0;
 }
 
