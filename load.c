@@ -6,6 +6,7 @@
 
 #include "runcmd.h"
 #include "elftool.h"
+#include "debug.h"
 #include "util.h"
 
 
@@ -19,12 +20,11 @@ int load_code(struct disasm *load){
         perror("read ");
         goto free_exit;
     }
-    dump_hex(code, prog.load.offset, prog.load.size);
+    // dump_hex(code, prog.load.offset, prog.load.size);
     
     load->data = code;
     load->size = prog.load.size;
     load->cur_va = prog.load.vaddr;
-    // load->cur = 0;
 
     return 0;
 free_exit:

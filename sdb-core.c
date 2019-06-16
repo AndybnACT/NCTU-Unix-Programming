@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <string.h>
+#include <signal.h>
 #include "debug.h"
 #include "util.h"
 #include "runcmd.h"
@@ -26,7 +27,7 @@ int tracee_setmem(unsigned long long addr,
 //                 int nrdata );
 int tracee_setbreak(struct breakpoint *b);
 int tracee_revisebreak(struct breakpoint *b);
-int tracee_si(void);
+int tracee_si_safe(void);
 
 int sdb_run(int argc, char** argv){
     ARGC_CHK(argc, 1);
@@ -44,15 +45,11 @@ int sdb_run(int argc, char** argv){
 
 int sdb_cont(int argc, char** argv){
     ARGC_CHK(argc, 1);
-    
     // check state
     if (!(STATE & STATE_RUNNING)) {
         printf("** cont command can only be used at running state\n");
         return 0;
     }
-    
-    // rollback current breakpoint if exist
-    dprintf(0, "cont_tracee not fully implemented!\n");
     // continue
     return tracee_cont();
 }
@@ -126,7 +123,7 @@ int sdb_setreg(int argc, char **argv){
 
 int sdb_dump(int argc, char **argv){
     static unsigned long long dump[10]; // 80 bytes
-    static unsigned long long addr = -1;
+    unsigned long long addr = prog.sdb_dumpaddr;
     unsigned long long *dumpped;
     // check state
     if (!(STATE & STATE_RUNNING)) {
@@ -143,20 +140,21 @@ int sdb_dump(int argc, char **argv){
         addr = str2num(argv[1]);
         if (addr == -1) {
             printf("** Cannot recognize address: %s\n", argv[1]);
-            return -1;
+            return 0;
         }
     }else{
         ARGC_CHK(argc, 2);
     }
     // get data
     if (tracee_getmem(addr, dump, &dumpped, 10)) {
-        printf("** cannot dump the specified memory region\n");
+        printf("** cannot fully dump the specified memory region\n");
     }
     // display
     long long size = (long long)((char*)dumpped - (char*)dump);
     dump_hex((char*) dump, addr, size);
     // success, update addr
     addr += size;
+    prog.sdb_dumpaddr = addr;
     return 0;
 }
 
@@ -180,9 +178,14 @@ int sdb_break(int argc, char **argv){
     }
     
     
+    // commit to breakpoint list, check if the bp exist at the same time
+    if (break_insert(&prog.b, new))
+        goto failed_free;
+
+
     //set breakpoint 
     if (STATE & STATE_RUNNING) {
-        if (tracee_setbreak(new)) {
+        if (tracee_setbreak(new)) { // activate
             printf("** error setting breakpoint\n");
             goto failed_free;
         }
@@ -192,9 +195,13 @@ int sdb_break(int argc, char **argv){
     new->deactivate = tracee_revisebreak;
     new->dis = capstone_dis_break;
     
-    // commit to breakpoint list
-    if (break_insert(&prog.b, new))
-        goto failed_free;
+    if (new->addr > prog.memoff + prog.load.vaddr + prog.load.size ||
+        new->addr < prog.memoff + prog.load.vaddr
+    ) {
+        printf("** warning, breaking at an address out of loaded .text section of the source itself\n");
+        if (prog.is_dyn) 
+            printf("** the breakpoint may not preserve accross each run due to ASLR\n");
+    }
     
     return 0;
 
@@ -216,7 +223,7 @@ int sdb_delb(int argc, char **argv){
     id = str2num(argv[1]);
     if (id == -1) {
         printf("** Cannot recognize id: %s\n", argv[1]);
-        return -1;
+        return 0;
     }
     
     if (break_remove_by_id(&prog.b, id))
@@ -233,7 +240,7 @@ int sdb_si(int argc, char **argv){
         return 0;
     }
     
-    return tracee_si();
+    return tracee_si_safe();
 }
 //========== ptrace related
 
@@ -343,18 +350,45 @@ failed:
     return -1;
 }
 
+int tracee_sig(void){
+    pid_t child = prog.pid;
+    siginfo_t data;
+    if (ptrace(PTRACE_GETSIGINFO, child, 0, &data)) {
+#ifdef DEBUG
+        perror("ptrace getsig");
+#endif
+        return -1;
+    }
+#ifdef DEBUG
+    psiginfo(&data, "child ");
+#endif
+    return data.si_signo;
+}
+
 int tracee_stop_callback(int status){
-    if (WIFEXITED(status)) {
+    int sig;
+    sig = tracee_sig();
+    prog.sig = 0;
+    if (WIFEXITED(status) || WIFSIGNALED(status)) {
         int exitcode = WEXITSTATUS(status);
-        printf("** child process %s terminated %s (code %d)\n",
-               prog.progname, 
-               (exitcode == 0)? "normally":"abnormally",
-               exitcode);
+        if (WIFEXITED(status))
+            printf("** child process %d terminated %s (code %d)\n",
+                    prog.pid, 
+                    (exitcode == 0)? "normally":"abnormally",
+                    exitcode);
+        else
+            printf("** child process %d terminated by signal %d\n",
+                    prog.pid, WTERMSIG(status));
+    
         STATE &= ~STATE_RUNNING;
+        break_unmask_all(prog.b);
         break_clear_activate_all(prog.b);
+        break_set_offset_all(prog.b, -prog.memoff);
+        prog.asm_file.dumpped = 0;
+        prog.asm_raw.dumpped = 0;
         prog.pid = -1;
         return STOP_EXIT;
-    }else if (WIFSTOPPED(status)) {
+    }else if (WIFSTOPPED(status) && sig == SIGTRAP) {
         dprintf(0, "stop status = 0x%x\n", WSTOPSIG(status));
         // get rip
         tracee_getallregs();
@@ -364,15 +398,27 @@ int tracee_stop_callback(int status){
         dprintf(0, "child process stopped, checking breakpoints\n");
         if (break_hit(prog.b, rip)) {
             dprintf(0, "child is stopped but not stopped by any breakpoint\n");
-            dprintf(0, "tracee_stop_callback not implemented!\n");
+            dprintf(0, "tracee_stop_callback is not fully implemented!\n");
             dbg_dump_breaks(0, prog.b);
             return STOP_BREAK_NOT_FOUND;
         }
-        
         // reset rip
         prog.regs.rip = rip; // ugly
         tracee_setallregs();
-        return 0;
+        return STOP_BREAK;
+    }else if (sig > 0) {
+        if (WIFSTOPPED(status))
+            dprintf(0, "stop status = 0x%x\n", WSTOPSIG(status));
+        psignal(sig, "** child receives ");
+        switch (sig) {
+            case SIGSEGV:
+            case SIGSTOP:
+            case SIGTSTP:
+                break;
+            default:
+                prog.sig = sig;
+        }
+        return STOP_SIGNALED;
     }
     dprintf(0, "tracee_stop_callback not implemented!\n");
     return 0;
@@ -381,23 +427,43 @@ int tracee_stop_callback(int status){
 int tracee_si(void){
     pid_t child = prog.pid;
     int status;
-    ptrace(PTRACE_SINGLESTEP, child, 0, 0);
+    ptrace(PTRACE_SINGLESTEP, child, 0, prog.sig);
     if (waitpid(child, &status, 0) < 0) {
         perror("waitpid");
     }
     return tracee_stop_callback(status);
 }
 
+int tracee_si_safe(void){
+    int reason;
+    reason = tracee_si();
+    
+    switch (reason) {
+        case STOP_EXIT:
+            return STOP_EXIT;
+        case STOP_BREAK_NOT_FOUND:
+            break_unmask_all(prog.b);
+            break_activate_all(prog.b);
+            return 0;
+        case STOP_BREAK:
+            break_activate_all(prog.b);
+            return STOP_BREAK;
+        case STOP_SIGNALED:
+            return STOP_SIGNALED;
+        default:
+            dprintf(0, "bug, tracee stop with un known reason\n");
+    }
+    return 0;
+}
 
 int tracee_cont(void){
     pid_t child = prog.pid;
     int status;
     
-    if (tracee_si() == STOP_EXIT)
+    if (tracee_si_safe())
         return 0;
-    break_activate_all(prog.b);
     
-    ptrace(PTRACE_CONT, child, 0, 0);
+    ptrace(PTRACE_CONT, child, 0, prog.sig);
     if (waitpid(child, &status, 0) < 0) {
         perror("waitpid ");
     }
@@ -487,10 +553,14 @@ int tracee_startup(unsigned long stop){
         if (waitpid(child, &status, 0) < 0) {
             perror("waitpid: ");
         }
-        assert(WIFSTOPPED(status));
+        status = tracee_stop_callback(status);
+        if (status == STOP_EXIT)
+            return 0;
         tracee_set_memoff(child);
         break_set_offset_all(prog.b, prog.memoff);
+        break_unmask_all(prog.b);
         break_activate_all(prog.b);
+        prog.sdb_dumpaddr = -1;
         ptrace(PTRACE_SETOPTIONS, child, 0, PTRACE_O_EXITKILL);
         if (!stop) {
             ptrace(PTRACE_CONT, child, 0, 0);

@@ -1,0 +1,9 @@
+disasm 0x4000b0
+b 0x4000c6
+l
+run
+set rip 0x4000b0
+cont
+delete 0
+set rip 0x4000b0
+cont

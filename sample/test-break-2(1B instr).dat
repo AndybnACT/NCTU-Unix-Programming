@@ -1,0 +1,6 @@
+load sample/guess
+b 0x92a
+r
+si
+si
+c

@@ -16,9 +16,10 @@ struct elf{
 
 struct disasm {
     char *data;
+    int dat_off;
     int size;
     unsigned long long cur_va;
-    // int cur;
+    int dumpped;
 };
 
 struct prog_ctx {
@@ -26,6 +27,7 @@ struct prog_ctx {
     int fd;
     unsigned int pid;
     struct elf load;
+    int sig;
     struct user_regs_struct regs;
     // char *codebuf;
     struct disasm asm_file;
@@ -35,6 +37,7 @@ struct prog_ctx {
     // we need to 
     int is_dyn;
     unsigned long long memoff;
+    unsigned long long sdb_dumpaddr; // for dump (x) command to remember addr
 };
 
 extern struct prog_ctx prog;
@@ -79,3 +82,5 @@ int tracee_getmem(unsigned long long addr,
 
 #define STOP_BREAK_NOT_FOUND 0xFC
 #define STOP_EXIT            0xEF
+#define STOP_BREAK           0xBB
+#define STOP_SIGNALED        0x5A

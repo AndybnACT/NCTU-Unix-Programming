@@ -3,7 +3,7 @@
 #include "runcmd.h"
 #include "debug.h"
 
-
+int dbg_exit(int argc, char **argv);
 int help(int argc, char **argv);
 
 struct command Commands[] = {
@@ -21,7 +21,8 @@ struct command Commands[] = {
     {"get"   , "g",  "- get reg: get a single value from a register", sdb_getreg},
     {"set"   , "s",  "- set reg val: get a single value to a register", sdb_setreg},
     {"getregs", NULL,"- getregs: show registers", sdb_getregs },
-    {"load"  , NULL, "- load {path/to/a/program}: load a program", load_prog}
+    {"load"  ,  NULL,"- load {path/to/a/program}: load a program", load_prog},
+    {"exit"  , "q",  "- exit: terminate the debugger", dbg_exit}
 };
 const int NCOMMAND = (sizeof(Commands)/sizeof(struct command));
 
@@ -91,4 +92,7 @@ int help(int argc, char **argv){
     return 0;
 }
 
+int dbg_exit(int argc, char **argv){
+    return -1;
+}
 

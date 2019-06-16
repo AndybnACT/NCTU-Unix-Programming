@@ -1,0 +1,15 @@
+load hello64
+b 0
+b 1
+b 2
+start
+si
+si
+l
+b 0x4000c4
+c
+l
+delete 0
+l
+delete -999
+c

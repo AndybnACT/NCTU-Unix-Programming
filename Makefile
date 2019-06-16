@@ -3,7 +3,7 @@ SOURCE = main.c
 OBJ    = main.o runcmd.o load.o elftool.o sdb-core.o util.o disasm.o break.o
 
 CC = gcc
-CFLAGS = -Wall -g 
+CFLAGS = -Wall -g -std=gnu99
 RM = rm
 
 all: $(TARGET)
@@ -14,10 +14,10 @@ clean:
 $(TARGET): $(OBJ)
 	$(CC) $(CFLAGS) -lelf -lcapstone $(OBJ) -o $(TARGET)
 
-load.o: load.c runcmd.h elftool.o
+load.o: load.c runcmd.h elftool.o debug.h
 	$(CC) $(CFLAGS) -c load.c -o load.o
 
-sdb-core.o: sdb-core.c break.o runcmd.o util.o
+sdb-core.o: sdb-core.c break.o runcmd.o util.o runcmd.h
 	$(CC) $(CFLAGS) -c sdb-core.c -o sdb-core.o
 
 util.o: regs.h util.c util.h

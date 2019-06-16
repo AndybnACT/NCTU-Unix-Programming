@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <unistd.h>
 #include "runcmd.h"
 #include "debug.h"
 
@@ -9,10 +10,12 @@ struct prog_ctx prog = {0, };
 
 int state_cleanup(void){
     if (STATE) {
-        dprintf(0, "clenup function not implemented!\n");
+        dprintf(10, "clenup function not fully implemented!\n");
     }
     if (STATE & STATE_LOAD) {
-        /* code */
+        close(prog.fd);
+        free(prog.progname);
+        free(prog.asm_file.data);
     }
     if (STATE & STATE_RUNNING) {
         /* code */
@@ -35,6 +38,7 @@ int main(int argc, char *argv[]) {
     while (1) {
     // get input command  
         printf("sdb> ");
+        errno = 0;
         ret = getline(&cmdbuf, &bufsize, stdin);
         if (ret == -1) {
             if (errno) {
