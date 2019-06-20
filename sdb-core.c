@@ -105,7 +105,7 @@ int sdb_setreg(int argc, char **argv){
         return -1;
     // str2num
     val = str2num(argv[2]);
-    if (val == -1) {
+    if (val == -1 && errno) {
         printf("** cannot recognize input number\n");
         return 0;
     }
@@ -124,7 +124,7 @@ int sdb_setreg(int argc, char **argv){
 int sdb_dump(int argc, char **argv){
     unsigned long long *dump;
     unsigned long long addr = prog.sdb_dumpaddr;
-    unsigned long long len = 80;
+    long long int len = 80;
     unsigned long long buflen, nrlong;
     unsigned long long *dumpped;
     // check state
@@ -140,7 +140,7 @@ int sdb_dump(int argc, char **argv){
         }
     }else if (argc == 2 || argc == 3 ) {
         addr = str2num(argv[1]);
-        if (addr == -1) {
+        if (addr == -1 && errno) {
             printf("** Cannot recognize address: %s\n", argv[1]);
             return 0;
         }
@@ -192,7 +192,7 @@ int sdb_break(int argc, char **argv){
     }
     // get address
     new->addr = str2num(argv[1]);
-    if (new->addr == -1) {
+    if (new->addr == -1 && errno) {
         printf("** cannot recognize input number\n");
         goto failed_free;
     }
@@ -241,8 +241,8 @@ int sdb_delb(int argc, char **argv){
     ARGC_CHK(argc, 2);
     
     id = str2num(argv[1]);
-    if (id == -1) {
-        printf("** Cannot recognize id: %s\n", argv[1]);
+    if (id < 0) {
+        printf("** Invalid id: %s\n", argv[1]);
         return 0;
     }
     

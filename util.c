@@ -18,6 +18,7 @@ unsigned long long str2num(char *str){
     ret = strtoull(str, &endptr, 0);
     if (*endptr) {
         printf("** warning str2num conversion not completed\n");
+        if (!errno) errno = EINVAL;
         return -1;
     }
     if (errno) {
